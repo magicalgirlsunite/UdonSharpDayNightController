@@ -1,43 +1,51 @@
-using System.Collections.Generic;
+using System;
 using UdonSharp;
 using UnityEngine;
-using VRC.SDKBase;
-using VRC.Udon;
 using UnityEngine.UI;
-using UdonToolkit;
+//using UdonToolkit;
+using UnityEditor;
+using UnityEngine.Serialization;
 
-[CustomName("Day/Night Cycle Controller")]
-public class DayNightCycleController : UdonSharpBehaviour
+//[CustomName("Day/Night Cycle Controller v2")]
+public class DayNightCycleController_v2 : UdonSharpBehaviour
 {
+
+    /*
+#if UNITY_ANDROID
+        private bool isQuest = true;
+#else
+    private bool isQuest = false;
+#endif
+    */
+    // --- OPTIMIZATION VARIABLES ---
+    private float visualUpdateTimer = 0f;
+    private float visualUpdateInterval = 0.1f; // Updates colors 10 times a second
+    private Cubemap currentCubemap;
+
     
+    [Space(10)]
+    [Header("Time-Based Toggles: Group 1 (e.g., Night Objects)")]
+    public GameObject[] toggleGroup1;
+    [Range(0f, 1f)] public float group1OnTime = 0.75f;
+    [Range(0f, 1f)] public float group1OffTime = 0.25f;
+    private bool group1IsOn = false;
 
-    [SectionHeader("Scene object references")][UTEditor]
-    [Tooltip("The sun")]
-    public Light Sun;
+    [Space(10)]
+    [Header("Time-Based Toggles: Group 2 (e.g., Day Objects)")]
+    public GameObject[] toggleGroup2;
+    [Range(0f, 1f)] public float group2OnTime = 0.3f;
+    [Range(0f, 1f)] public float group2OffTime = 0.6f;
+    private bool group2IsOn = false;
 
-    [Tooltip("")]
+    [Header("UI components")]
+    [Tooltip("Requires a canvas")]
     public Slider SpeedSlider;
     public Slider TimeSlider;
     public Toggle LocalToggle;
 
-    [Tooltip("BFW Clouds material")]
-    public Material LowCloud;
-    [Tooltip("BFW Clouds material")]
-    public Material HighCloud;
-
-    public Material Stars;
-    [Tooltip("A spherical particle system")]
-    public GameObject StarsObject;
-    public Material Moon;
-    [Tooltip("Should include the stars particle system and moon mesh gameobjects")]
-    public GameObject SkyObject;
-
     //public GameObject FireFX;
 
-    //public AudioSource Birds;
-    //public AudioSource Cicadas;
-
-    [SectionHeader("")][UTEditor]
+    [Header("Time")]
     [UdonSynced]
     public float SetTime = 0.2f;
     [UdonSynced]
@@ -45,22 +53,101 @@ public class DayNightCycleController : UdonSharpBehaviour
     public int lastreceivedid = 0;
     [UdonSynced]
     public float SetSpeed = 1 / 600f;
-
-
+    
     [Range(0, 1)]
     public float CurrentTimeOfDay = 0.2f;
-    
     public float Speed = 1 / 600f;
-    [HideInInspector]
     public float TimeMultiplier = 1f;
 
-    [SectionHeader("Defines colors at set points in the cycle")][UTEditor]
     
-    public Color SunColor1;
-    public Color SunColor2;
+    [Header("SET Environment Lighting > Source TO Color IN LIGHTING WINDOW!")]
+    [Tooltip("Color at set point in the cycle")] public Color AmbientColor1;
+    [Tooltip("Color at set point in the cycle")] public Color AmbientColor2;
+    [Tooltip("Color at set point in the cycle")] public Color AmbientColor3;
+    public float AmbientPoint1 = 0.2f;
+    public float AmbientPoint2 = 0.25f;
+    //[HelpBox("SET ENVIORNMENT LIGHTING > SOURCE TO COLOR IN LIGHTING WINDOW!")] [UTEditor]
+    public float AmbientPoint3 = 0.35f;
+    
+    
+    //[SectionHeader("Scene object references")][UTEditor]
+    [Header("Scene object references")] 
+    public bool UseSun = true;
+    [Tooltip("Directional Light")]
+    public Light Sun;
+    //[SectionHeader("Defines Color at set point in the cycle")][UTEditor]
+    //[Header("Color at set point in the cycle")]
+    [Tooltip("Color at set point in the cycle")] public Color SunColor1;
+    [Tooltip("Color at set point in the cycle")] public Color SunColor2;
     public float SunPoint1 = 0.25f;
     public float SunPoint2 = 0.35f;
-
+    
+    //[Header("Light intensity at set points in the cycle")]
+    public float SunIntensityPoint1 = 0.23f;
+    public float SunIntensityPoint2 = 0.25f;
+    
+    [Space]
+    [Header("Custom reflection probe for different times of day")]
+    public bool UseReflectionProbe = true;
+    [FormerlySerializedAs("Probe")] public ReflectionProbe RefProbe;
+    public Cubemap DawnCubemap;
+    public Cubemap DayCubemap;
+    public Cubemap DuskCubemap;
+    public Cubemap NightCubemap;
+    
+    [Space]
+    [Header("Sky objects")] 
+    public bool UseSky = true;
+    [Tooltip("Should include the stars particle system and moon mesh gameobjects. Allows them to rotate in the sky")]
+    public GameObject SkyObject;
+    [Header("Stars")]
+    [FormerlySerializedAs("Stars")] [SerializeField] private bool UseStars = true;
+    public Material StarsMat;
+    [Tooltip("A spherical particle system")]
+    public GameObject StarsObject;
+    
+    //[Header("Color at set point in the cycle")]
+    [Tooltip("Color at set point in the cycle")] public Color StarColor1;
+    [Tooltip("Color at set point in the cycle")] public Color StarColor2;
+    public float StarPoint1 = 0.2f;
+    public float StarPoint2 = 0.25f;
+    public float StarCutoff = 0.3f;
+    
+    [Header("Moon")]
+    [Space]
+    [Header("Standard Unity Global Fog")]
+    public bool UseGlobalFog = true;
+    public Color FogColorDay = new Color(0.5f, 0.6f, 0.7f);
+    public Color FogColorNight = new Color(0.05f, 0.05f, 0.1f);
+    [Tooltip("When sunrise starts")]
+    public float FogPoint1 = 0.2f; 
+    [Tooltip("When daytime is fully reached")]
+    public float FogPoint2 = 0.25f;
+    [SerializeField] private bool UseMoon = true;
+    [FormerlySerializedAs("Moon")] public Material MoonMat;
+    
+    //[Header("Color at set point in the cycle")]
+    [Tooltip("Color at set point in the cycle")] public Color MoonColor1;
+    [Tooltip("Color at set point in the cycle")] public Color MoonColor2;
+    public float MoonPoint1 = 0.2f;
+    public float MoonPoint2 = 0.25f;
+    
+    
+    [Space]
+    [Header("For use with BFW clouds (no longer available on Unity Asset Store)")]
+    [Header("Cloud Materials (Optional)")]
+    [SerializeField] private bool UseClouds;
+    public Material LowCloud;
+    [Tooltip("BFW Clouds material")]
+    public Material HighCloud;
+    //[Header("Color at set point in the cycle")]
+    [Tooltip("Color at set point in the cycle")] public Color CloudColor1;
+    [Tooltip("Color at set point in the cycle")] public Color CloudColor2;
+    [Tooltip("Color at set point in the cycle")] public Color CloudColor3;
+    public float CloudPoint1 = 0.2f;
+    public float CloudPoint2 = 0.25f;
+    public float CloudPoint3 = 0.35f;
+    
     /* Was used with REDSIM's Water Shaders
     public Color WaterFarColor1;
     public Color WaterFarColor2;
@@ -73,62 +160,45 @@ public class DayNightCycleController : UdonSharpBehaviour
     public float WaterPoint3 = 0.35f;
     */
     
-    [SectionHeader("")][UTEditor]
-    public Color AmbientColor1;
-    public Color AmbientColor2;
-    public Color AmbientColor3;
-    public float AmbientPoint1 = 0.2f;
-    public float AmbientPoint2 = 0.25f;
-    [HelpBox("SET ENVIORNMENT LIGHTING > SOURCE TO COLOR IN LIGHTING WINDOW!")] [UTEditor]
-    public float AmbientPoint3 = 0.35f;
+    /*
+    [Header("Audio Source")]
+    public AudioSource Audio;
     
-
-    [SectionHeader("")]
-    [UTEditor]
-    public Color CloudColor1;
-    public Color CloudColor2;
-    public Color CloudColor3;
-    public float CloudPoint1 = 0.2f;
-    public float CloudPoint2 = 0.25f;
-    public float CloudPoint3 = 0.35f;
-
-    [SectionHeader("")]
-    [UTEditor]
-    public Color StarColor1;
-    public Color StarColor2;
-    public float StarPoint1 = 0.2f;
-    public float StarPoint2 = 0.25f;
-    public float StarCutoff = 0.3f;
-
-    [SectionHeader("")]
-    [UTEditor]
-    public Color MoonColor1;
-    public Color MoonColor2;
-    public float MoonPoint1 = 0.2f;
-    public float MoonPoint2 = 0.25f;
-
-    [SectionHeader("")]
-    [UTEditor]
+    //[UTEditor]
+    [Header("Defines when an audio source is played at set points in the cycle")]
     public float AudioPoint1 = 0.25f;
     public float AudioPoint2 = 0.35f;
-
-    [SectionHeader("")]
-    [UTEditor]
-    public float SunIntensityPoint1 = 0.23f;
-    public float SunIntensityPoint2 = 0.25f;
+    */
 
     float SunInitialIntensity;
 
-    bool local = false;
+    bool local;
+    private bool lowCloudNotNull;
+    private bool highCloudNotNull;
+
+    private Color c;
 
     void Start()
     {
         SunInitialIntensity = Sun.intensity;
         //BirdsInitialVolume = Birds.volume;
         //CicadasInitialVolume = Cicadas.volume;
-        Random.InitState((int)Time.time);
+        UnityEngine.Random.InitState((int)Time.time);
         TimeSlider.value = CurrentTimeOfDay;
         SpeedSlider.value = Speed;
+        
+        // null checks
+        lowCloudNotNull = LowCloud != null;
+        highCloudNotNull = HighCloud != null;
+        if (!lowCloudNotNull && !highCloudNotNull) UseClouds = false;
+        
+        if (UseStars) if (StarsMat == null || StarsObject == null) UseStars = false;
+        if (!UseStars && StarsMat == null && StarsObject != null) StarsObject.SetActive(false);
+        
+        if (UseMoon) if (MoonMat == null) UseMoon = false;
+        if (UseReflectionProbe) if (RefProbe == null) UseReflectionProbe = false;
+        
+        if (SkyObject == null) UseSky = false;
     }
 
     public void LocalUpdated()
@@ -161,11 +231,16 @@ public class DayNightCycleController : UdonSharpBehaviour
 
     private int GetID()
     {
-        return Random.Range(-2000000000, 2000000000);
+        return UnityEngine.Random.Range(-2000000000, 2000000000);
     }
 
-    void Update()
+   void Update()
     {
+        // ==========================================
+        // 1. FAST UPDATES (Runs 90 times a second)
+        // ==========================================
+        
+        // Network Sync check
         if (syncid != lastreceivedid)
         {
             lastreceivedid = syncid;
@@ -177,79 +252,123 @@ public class DayNightCycleController : UdonSharpBehaviour
                 SpeedSlider.value = Speed;
             }
         }
-        
-        else if (TimeSlider.gameObject.activeInHierarchy && Time.time % 1 < 0.01f)
-        {
-            TimeSlider.value = CurrentTimeOfDay;
-            SpeedSlider.value = Speed;
-        }
-        
-        Sun.transform.localRotation = Quaternion.Euler((CurrentTimeOfDay * 360f) - 90, 140, 30);
-        SkyObject.transform.localRotation = Quaternion.Euler((CurrentTimeOfDay * 360f) - 90, 140, 30);
 
-        Sun.color = TwoPoint(SunPoint1, SunPoint2, SunColor1, SunColor2);
-        
-        RenderSettings.ambientLight = ThreePoint(AmbientPoint1, AmbientPoint2, AmbientPoint3, AmbientColor1, AmbientColor2, AmbientColor3);
-        Color c = ThreePoint(CloudPoint1, CloudPoint2, CloudPoint3, CloudColor1, CloudColor2, CloudColor3);
-        LowCloud.SetColor("_CloudColor", c);
-        HighCloud.SetColor("_CloudColor", c);
-
-        /*
-        c = ThreePoint(WaterPoint1, WaterPoint2, WaterPoint3, WaterFarColor1, WaterFarColor2, WaterFarColor3);
-        Water.SetColor("_ColorFar", c);
-        c = ThreePoint(WaterPoint1, WaterPoint2, WaterPoint3, WaterCloseColor1, WaterCloseColor2, WaterCloseColor3);
-        Water.SetColor("_ColorClose", c);        
-        */
-        
-        c = TwoPoint(StarPoint1, StarPoint2, StarColor1, StarColor2);
-        Stars.SetColor("_EmissionColor", c);
-
-        if (c.a <= StarCutoff)
-        {
-            if (StarsObject.activeInHierarchy)
-            {
-                StarsObject.SetActive(false);
-            }
-        }
-        else if (!StarsObject.activeInHierarchy)
-        {
-            StarsObject.SetActive(true);
-        }
-
-        Moon.color = TwoPoint(MoonPoint1, MoonPoint2, MoonColor1, MoonColor2);
-
-        /*
-        if (CurrentTimeOfDay > FirePoint && CurrentTimeOfDay < 1 - FirePoint)
-        {
-            if (FireFX.activeSelf)
-            {
-                FireFX.SetActive(false);
-            }
-        }
-        else
-        {
-            if (!FireFX.activeSelf)
-            {
-                FireFX.SetActive(true);
-            }
-        }
-        */
-
-        float audiovolume = TwoPointFloat(AudioPoint1, AudioPoint2);
-
-        //Birds.volume = BirdsInitialVolume * audiovolume;
-        //Cicadas.volume = CicadasInitialVolume * Mathf.Clamp(1f - audiovolume, 0f, 1f);
-
-        float sunintensity = TwoPointFloat(SunIntensityPoint1, SunIntensityPoint2);
-        Sun.intensity = (SunInitialIntensity * sunintensity) + 0.001f;
-
-
+        // Advance Time
         CurrentTimeOfDay += (Time.deltaTime * Speed) * TimeMultiplier;
 
         if (CurrentTimeOfDay >= 1)
         {
-            CurrentTimeOfDay = 0;
+            CurrentTimeOfDay -= 1f; // Math optimization: faster than resetting to 0
+            currentDay++; 
+            difficultyMultiplier += difficultyIncreasePerDay; 
         }
+
+        // Keep physical rotation smooth every frame
+        if (UseSun)
+        {
+            Sun.transform.localRotation = Quaternion.Euler((CurrentTimeOfDay * 360f) - 90, 140, 30);
+        }
+        if (UseSky) 
+        {
+            SkyObject.transform.localRotation = Quaternion.Euler((CurrentTimeOfDay * 360f) - 90, 140, 30);
+        }
+
+        // ==========================================
+        // 2. SLOW UPDATES (Throttled to run 10x a second)
+        // ==========================================
+        
+        visualUpdateTimer += Time.deltaTime;
+        if (visualUpdateTimer >= visualUpdateInterval)
+        {
+            visualUpdateTimer = 0f; // Reset the timer
+
+            // --- UI Update ---
+            if (TimeSlider.gameObject.activeInHierarchy)
+            {
+                TimeSlider.value = CurrentTimeOfDay;
+                SpeedSlider.value = Speed;
+            }
+
+            // --- Heavy Color Math & GPU Updates ---
+            RenderSettings.ambientLight = ThreePoint(AmbientPoint1, AmbientPoint2, AmbientPoint3, AmbientColor1, AmbientColor2, AmbientColor3);
+            // --- Global Fog Update ---
+            if (UseGlobalFog)
+            {
+                // This uses your existing TwoPoint math to smoothly crossfade the colors!
+                RenderSettings.fogColor = TwoPoint(FogPoint1, FogPoint2, FogColorNight, FogColorDay);
+            }
+            if (UseSun)
+            {
+                Sun.color = TwoPoint(SunPoint1, SunPoint2, SunColor1, SunColor2);
+                float sunintensity = TwoPointFloat(SunIntensityPoint1, SunIntensityPoint2);
+                Sun.intensity = (SunInitialIntensity * sunintensity) + 0.001f;
+            }
+
+            if (UseClouds)
+            {
+                c = ThreePoint(CloudPoint1, CloudPoint2, CloudPoint3, CloudColor1, CloudColor2, CloudColor3);
+                if (lowCloudNotNull) LowCloud.SetColor("_CloudColor", c);
+                if (highCloudNotNull) HighCloud.SetColor("_CloudColor", c);
+            }
+
+            if (UseStars)
+            {
+                c = TwoPoint(StarPoint1, StarPoint2, StarColor1, StarColor2);
+                StarsMat.SetColor("_EmissionColor", c);
+                
+                if (c.a <= StarCutoff && StarsObject.activeSelf) StarsObject.SetActive(false);
+                else if (c.a > StarCutoff && !StarsObject.activeSelf) StarsObject.SetActive(true);
+            }
+
+            if (UseMoon) MoonMat.color = TwoPoint(MoonPoint1, MoonPoint2, MoonColor1, MoonColor2);
+
+            // --- Memory-Safe Reflection Probe ---
+            if (UseReflectionProbe)
+            {
+                Cubemap newCubemap = CycleCubemap(SunPoint1, SunPoint2, NightCubemap, DawnCubemap, DayCubemap, DuskCubemap);
+                
+                // ONLY push the update to the GPU if the cubemap actually changed
+                if (newCubemap != currentCubemap)
+                {
+                    currentCubemap = newCubemap;
+                    RefProbe.customBakedTexture = currentCubemap;
+                }
+            }
+        }
+
+        // ==========================================
+        // 3. TOGGLES (Runs every frame, but guarded by state-checks)
+        // ==========================================
+        
+        #region Object Toggles (Group 1)
+        bool g1ShouldBeOn = (group1OnTime > group1OffTime) 
+            ? (CurrentTimeOfDay >= group1OnTime || CurrentTimeOfDay <= group1OffTime) 
+            : (CurrentTimeOfDay >= group1OnTime && CurrentTimeOfDay <= group1OffTime);
+
+        if (g1ShouldBeOn != group1IsOn)
+        {
+            group1IsOn = g1ShouldBeOn;
+            foreach (GameObject obj in toggleGroup1)
+            {
+                if (obj != null) obj.SetActive(group1IsOn);
+            }
+        }
+        #endregion
+
+        #region Object Toggles (Group 2)
+        bool g2ShouldBeOn = (group2OnTime > group2OffTime) 
+            ? (CurrentTimeOfDay >= group2OnTime || CurrentTimeOfDay <= group2OffTime) 
+            : (CurrentTimeOfDay >= group2OnTime && CurrentTimeOfDay <= group2OffTime);
+
+        if (g2ShouldBeOn != group2IsOn)
+        {
+            group2IsOn = g2ShouldBeOn;
+            foreach (GameObject obj in toggleGroup2)
+            {
+                if (obj != null) obj.SetActive(group2IsOn);
+            }
+        }
+        #endregion
     }
 
 
@@ -360,4 +479,42 @@ public class DayNightCycleController : UdonSharpBehaviour
 
         return ret;
     }
+    
+    public Cubemap CycleCubemap(float p1, float p2, Cubemap night, Cubemap dawn, Cubemap day, Cubemap dusk)
+    {
+        Cubemap cubemap = night;
+
+        float p3 = 1 - p2,
+            p4 = 1 - p1;
+
+        p1 -= 0.05f;
+        p4 += 0.05f;
+
+        if (CurrentTimeOfDay < p1) {
+            //ret = night;
+        }
+        else if (p1 < CurrentTimeOfDay && CurrentTimeOfDay < p2)
+        {
+            cubemap = dawn;
+        }
+        else if (p2 < CurrentTimeOfDay && CurrentTimeOfDay < p3)
+        {
+            cubemap = day;
+        }
+        else if (CurrentTimeOfDay < p4)
+        {
+            cubemap = dusk;
+        }
+
+        
+        return cubemap;
+    }
+
+#if !COMPILER_UDONSHARP && UNITY_EDITOR
+    public void TestChangeGUI(object value)
+    {
+        var casted = ((SerializedProperty)value)?.floatValue;
+        var actualVal = Convert.ToSingle(casted);
+    }
+#endif
 }
