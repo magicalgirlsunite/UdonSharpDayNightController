@@ -22,7 +22,14 @@ public class DayNightCycleController_v2 : UdonSharpBehaviour
     private float visualUpdateInterval = 0.1f; // Updates colors 10 times a second
     private Cubemap currentCubemap;
 
-    
+    [Space(10)]
+    [Header("Time-Based Toggles: Group 0 (e.g., Night Objects)")]
+    public GameObject[] toggleGroup0;
+    [Range(0f, 1f)] public float group0OnTime = 0.75f;
+    [Range(0f, 1f)] public float group0OffTime = 0.25f;
+    private bool group0IsOn = false;
+
+
     [Space(10)]
     [Header("Time-Based Toggles: Group 1 (e.g., Night Objects)")]
     public GameObject[] toggleGroup1;
@@ -339,7 +346,21 @@ public class DayNightCycleController_v2 : UdonSharpBehaviour
         // ==========================================
         // 3. TOGGLES (Runs every frame, but guarded by state-checks)
         // ==========================================
-        
+         #region Object Toggles (Group 0)
+        bool g0ShouldBeOn = (group0OnTime > group1OffTime) 
+            ? (CurrentTimeOfDay >= group0OnTime || CurrentTimeOfDay <= group0OffTime) 
+            : (CurrentTimeOfDay >= group0OnTime && CurrentTimeOfDay <= group0OffTime);
+
+        if (g1ShouldBeOn != group0IsOn)
+        {
+            group0IsOn = g0ShouldBeOn;
+            foreach (GameObject obj in toggleGroup0)
+            {
+                if (obj != null) obj.SetActive(group0IsOn);
+            }
+        }
+        #endregion
+
         #region Object Toggles (Group 1)
         bool g1ShouldBeOn = (group1OnTime > group1OffTime) 
             ? (CurrentTimeOfDay >= group1OnTime || CurrentTimeOfDay <= group1OffTime) 
